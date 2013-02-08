@@ -222,6 +222,8 @@ static const struct sync_timeline_ops kgsl_sync_timeline_ops = {
 	.dup = kgsl_sync_pt_dup,
 	.has_signaled = kgsl_sync_pt_has_signaled,
 	.compare = kgsl_sync_pt_compare,
+	.timeline_value_str = kgsl_sync_timeline_value_str,
+	.pt_value_str = kgsl_sync_pt_value_str,
 };
 
 int kgsl_sync_timeline_create(struct kgsl_context *context)
