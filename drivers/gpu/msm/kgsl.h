@@ -223,7 +223,7 @@ static inline int kgsl_atomic_read(atomic_t *addr)
 }
 
 struct kgsl_mem_entry *kgsl_get_mem_entry(struct kgsl_device *device,
-		unsigned int ptbase, unsigned int gpuaddr, unsigned int size);
+		phys_addr_t ptbase, unsigned int gpuaddr, unsigned int size);
 
 struct kgsl_mem_entry *kgsl_sharedmem_find_region(
 	struct kgsl_process_private *private, unsigned int gpuaddr,
