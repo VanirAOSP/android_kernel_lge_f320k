@@ -113,6 +113,10 @@ struct adreno_device {
 	unsigned int mharb;
 	struct adreno_gpudev *gpudev;
 	unsigned int wait_timeout;
+	unsigned int pm4_jt_idx;
+	unsigned int pm4_jt_addr;
+	unsigned int pfp_jt_idx;
+	unsigned int pfp_jt_addr;
 	unsigned int istore_size;
 	unsigned int pix_shader_start;
 	unsigned int instruction_size;
@@ -221,6 +225,7 @@ struct adreno_gpudev {
 	void (*coresight_disable) (struct kgsl_device *device);
 	void (*coresight_config_debug_reg) (struct kgsl_device *device,
 			int debug_reg, unsigned int val);
+	void (*soft_reset)(struct adreno_device *device);
 };
 
 /*
@@ -359,6 +364,9 @@ int adreno_perfcounter_put(struct adreno_device *adreno_dev,
 int adreno_soft_reset(struct kgsl_device *device);
 
 int adreno_a3xx_pwron_fixup_init(struct adreno_device *adreno_dev);
+
+int adreno_soft_reset(struct kgsl_device *device);
+
 
 static inline int adreno_is_a200(struct adreno_device *adreno_dev)
 {
