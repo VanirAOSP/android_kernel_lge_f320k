@@ -102,10 +102,6 @@ int kgsl_add_event(struct kgsl_device *device, u32 id, u32 ts,
 
 	trace_kgsl_register_event(id, ts);
 
-	/* inc refcount to avoid race conditions in cleanup */
-	if (context)
-		kgsl_context_get(context);
-
 	/* Add the event to either the owning context or the global list */
 
 	if (context) {
