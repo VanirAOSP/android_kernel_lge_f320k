@@ -175,6 +175,7 @@ struct kgsl_device {
 	struct work_struct hang_check_ws;
 	struct work_struct hang_intr_ws;
 	struct timer_list idle_timer;
+	struct timer_list hang_timer;
 	struct kgsl_pwrctrl pwrctrl;
 	int open_count;
 
