@@ -49,6 +49,8 @@
 #define QCT_AUTO_PLL_PATCH
 #define QCT_UNDERRUN_PATCH
 #endif
+/* wait for at most 2 vsync for lowest refresh rate (24hz) */
+#define KOFF_TIMEOUT msecs_to_jiffies(84)
 
 #ifdef MDSS_MDP_DEBUG_REG
 static inline void mdss_mdp_reg_write(u32 addr, u32 val)
