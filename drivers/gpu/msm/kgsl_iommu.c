@@ -397,7 +397,9 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 
 	kgsl_sharedmem_readl(&device->memstore, &curr_context_id,
 		KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL, current_context));
-	context = idr_find(&device->context_idr, curr_context_id);
+
+	context = kgsl_context_get(device, curr_context_id);
+
 	if (context != NULL) {
 		kgsl_sharedmem_readl(&device->memstore, &curr_global_ts,
 			KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
