@@ -1303,11 +1303,13 @@ void adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 	if (0xFFFFFFFF == ft_data->start_of_replay_cmds)
 		return;
 
-	k_ctxt = idr_find(&device->context_idr, ft_data->context_id);
+	k_ctxt = kgsl_context_get(device, ft_data->context_id);
+
 	if (k_ctxt) {
 		a_ctxt = ADRENO_CONTEXT(k_ctxt);
 		if (a_ctxt->flags & CTXT_FLAGS_PREAMBLE)
 			_turn_preamble_on_for_ib_seq(rb, rb_rptr);
+		kgsl_context_put(k_ctxt);
 	}
 	k_ctxt = NULL;
 
@@ -1338,7 +1340,8 @@ void adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 			/* if context switches to a context that did not cause
 			 * hang then start saving the rb contents as those
 			 * commands can be executed */
-			k_ctxt = idr_find(&rb->device->context_idr, val2);
+			k_ctxt = kgsl_context_get(rb->device, val2);
+
 			if (k_ctxt) {
 				a_ctxt = ADRENO_CONTEXT(k_ctxt);
 
@@ -1376,6 +1379,7 @@ void adreno_ringbuffer_extract(struct adreno_ringbuffer *rb,
 				copy_rb_contents = 0;
 			}
 			}
+			kgsl_context_put(k_ctxt);
 		}
 
 		if (copy_rb_contents)

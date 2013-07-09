@@ -814,6 +814,8 @@ int adreno_dump(struct kgsl_device *device, int manual)
 	else
 		KGSL_LOG_DUMP(device, "BAD CTXT: %d\n", context_id);
 
+	kgsl_context_put(context);
+
 	num_item = adreno_ringbuffer_count(&adreno_dev->ringbuffer,
 						cp_rb_rptr);
 	if (num_item <= 0)
