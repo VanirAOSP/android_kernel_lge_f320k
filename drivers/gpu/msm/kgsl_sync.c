@@ -190,6 +190,16 @@ int kgsl_sync_timeline_create(struct kgsl_context *context)
 {
 	struct kgsl_sync_timeline *ktimeline;
 
+	/* Generate a name which includes the thread name, thread id, process
+	 * name, process id, and context id. This makes it possible to
+	 * identify the context of a timeline in the sync dump. */
+	char ktimeline_name[sizeof(context->timeline->name)] = {};
+	snprintf(ktimeline_name, sizeof(ktimeline_name),
+		"%s_%.15s(%d)-%.15s(%d)-%d",
+		context->device->name,
+		current->group_leader->comm, current->group_leader->pid,
+		current->comm, current->pid, context->id);
+
 	context->timeline = sync_timeline_create(&kgsl_sync_timeline_ops,
 		(int) sizeof(struct kgsl_sync_timeline), "kgsl-timeline");
 	if (context->timeline == NULL)
@@ -197,6 +207,8 @@ int kgsl_sync_timeline_create(struct kgsl_context *context)
 
 	ktimeline = (struct kgsl_sync_timeline *) context->timeline;
 	ktimeline->last_timestamp = 0;
+	ktimeline->device = context->device;
+	ktimeline->context_id = context->id;
 
 	return 0;
 }

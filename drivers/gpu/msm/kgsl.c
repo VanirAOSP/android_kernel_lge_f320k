@@ -423,21 +423,24 @@ static void kgsl_mem_entry_detach_process(struct kgsl_mem_entry *entry)
 	kgsl_mem_entry_put(entry);
 }
 
-/* Allocate a new context id */
-
-static struct kgsl_context *
-kgsl_create_context(struct kgsl_device_private *dev_priv)
+/**
+ * kgsl_context_init() - helper to initialize kgsl_context members
+ * @dev_priv: the owner of the context
+ * @context: the newly created context struct, should be allocated by
+ * the device specific drawctxt_create function.
+ *
+ * This is a helper function for the device specific drawctxt_create
+ * function to initialize the common members of its context struct.
+ * If this function succeeds, reference counting is active in the context
+ * struct and the caller should kgsl_context_put() it on error.
+ * If it fails, the caller should just free the context structure
+ * it passed in.
+ */
+int kgsl_context_init(struct kgsl_device_private *dev_priv,
+			struct kgsl_context *context)
 {
-	struct kgsl_context *context;
-	int ret, id;
-
-	context = kzalloc(sizeof(*context), GFP_KERNEL);
-
-	if (context == NULL) {
-		KGSL_DRV_INFO(dev_priv->device, "kzalloc(%d) failed\n",
-				sizeof(*context));
-		return ERR_PTR(-ENOMEM);
-	}
+	int ret = 0, id;
+	struct kgsl_device *device = dev_priv->device;
 
 	while (1) {
 		if (idr_pre_get(&dev_priv->device->context_idr,
@@ -456,16 +459,15 @@ kgsl_create_context(struct kgsl_device_private *dev_priv)
 	}
 
 	if (ret)
-		goto func_end;
+		goto fail;
 
 	/* MAX - 1, there is one memdesc in memstore for device info */
 	if (id >= KGSL_MEMSTORE_MAX) {
 		KGSL_DRV_INFO(dev_priv->device, "cannot have more than %d "
 				"ctxts due to memstore limitation\n",
 				KGSL_MEMSTORE_MAX);
-		idr_remove(&dev_priv->device->context_idr, id);
 		ret = -ENOSPC;
-		goto func_end;
+		goto fail_free_id;
 	}
 
 	kref_init(&context->refcount);
@@ -475,10 +477,8 @@ kgsl_create_context(struct kgsl_device_private *dev_priv)
 	context->pid = dev_priv->process_priv->pid;
 
 	ret = kgsl_sync_timeline_create(context);
-	if (ret) {
-		idr_remove(&dev_priv->device->context_idr, id);
-		goto func_end;
-	}
+	if (ret)
+		goto fail_free_id;
 
 	/* Initialize the pending event list */
 	INIT_LIST_HEAD(&context->events);
@@ -493,15 +493,15 @@ kgsl_create_context(struct kgsl_device_private *dev_priv)
 	 */
 
 	INIT_LIST_HEAD(&context->events_list);
-
-func_end:
-	if (ret) {
-		kfree(context);
-		return ERR_PTR(ret);
-	}
-
-	return context;
+	return 0;
+fail_free_id:
+	write_lock(&device->context_lock);
+	idr_remove(&dev_priv->device->context_idr, id);
+	write_unlock(&device->context_lock);
+fail:
+	return ret;
 }
+EXPORT_SYMBOL(kgsl_context_init);
 
 /**
  * kgsl_context_detach - Release the "master" context reference
@@ -511,31 +511,36 @@ func_end:
  * has requested for it to be destroyed. The context itself may
  * exist a bit longer until its reference count goes to zero.
  * Other code referencing the context can detect that it has been
- * detached because the context id will be set to KGSL_CONTEXT_INVALID.
+ * detached by checking the KGSL_CONTEXT_DETACHED bit in
+ * context->priv.
  */
 void
 kgsl_context_detach(struct kgsl_context *context)
 {
-	int id;
 	struct kgsl_device *device;
 	if (context == NULL)
 		return;
-	device = context->dev_priv->device;
-	trace_kgsl_context_detach(device, context);
-	id = context->id;
 
-	if (device->ftbl->drawctxt_destroy)
-		device->ftbl->drawctxt_destroy(device, context);
-	/*device specific drawctxt_destroy MUST clean up devctxt */
-	BUG_ON(context->devctxt);
+	device = context->device;
+
+	/*
+	 * Mark the context as detached to keep others from using
+	 * the context before it gets fully removed, and to make sure
+	 * we don't try to detach twice.
+	 */
+	if (test_and_set_bit(KGSL_CONTEXT_DETACHED, &context->priv))
+		return;
+
+	trace_kgsl_context_detach(device, context);
+
+	device->ftbl->drawctxt_detach(context);
 	/*
 	 * Cancel events after the device-specific context is
-	 * destroyed, to avoid possibly freeing memory while
+	 * detached, to avoid possibly freeing memory while
 	 * it is still in use by the GPU.
 	 */
 	kgsl_cancel_events_ctxt(device, context);
-	idr_remove(&device->context_idr, id);
-	context->id = KGSL_CONTEXT_INVALID;
+
 	kgsl_context_put(context);
 }
 
@@ -544,8 +549,19 @@ kgsl_context_destroy(struct kref *kref)
 {
 	struct kgsl_context *context = container_of(kref, struct kgsl_context,
 						    refcount);
+	struct kgsl_device *device = context->device;
+
+	trace_kgsl_context_destroy(device, context);
+
+	write_lock(&device->context_lock);
+	if (context->id != KGSL_CONTEXT_INVALID) {
+		idr_remove(&device->context_idr, context->id);
+		context->id = KGSL_CONTEXT_INVALID;
+	}
+	write_unlock(&device->context_lock);
 	kgsl_sync_timeline_destroy(context);
-	kfree(context);
+
+	device->ftbl->drawctxt_destroy(context);
 }
 
 struct kgsl_device *kgsl_get_device(int dev_idx)
@@ -911,7 +927,7 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 		if (context == NULL)
 			break;
 
-		if (context->dev_priv == dev_priv)
+		if (context->pid == private->pid)
 			kgsl_context_detach(context);
 
 		next = next + 1;
@@ -1557,27 +1573,16 @@ static long kgsl_ioctl_drawctxt_create(struct kgsl_device_private *dev_priv,
 	int result = 0;
 	struct kgsl_drawctxt_create *param = data;
 	struct kgsl_context *context = NULL;
+	struct kgsl_device *device = dev_priv->device;
 
-	context = kgsl_create_context(dev_priv);
-
+	context = device->ftbl->drawctxt_create(dev_priv, &param->flags);
 	if (IS_ERR(context)) {
 		result = PTR_ERR(context);
 		goto done;
 	}
-
-	if (dev_priv->device->ftbl->drawctxt_create) {
-		result = dev_priv->device->ftbl->drawctxt_create(
-			dev_priv->device, dev_priv->process_priv->pagetable,
-			context, &param->flags);
-		if (result)
-			goto done;
-	}
 	trace_kgsl_context_create(dev_priv->device, context, param->flags);
 	param->drawctxt_id = context->id;
 done:
-	if (result && !IS_ERR(context))
-		kgsl_context_detach(context);
-
 	return result;
 }
 
@@ -2529,7 +2534,7 @@ static long kgsl_ioctl_cff_syncmem(struct kgsl_device_private *dev_priv,
 	if (!entry)
 		return -EINVAL;
 
-	kgsl_cffdump_syncmem(dev_priv, &entry->memdesc, param->gpuaddr,
+	kgsl_cffdump_syncmem(dev_priv->device, &entry->memdesc, param->gpuaddr,
 			     param->len, true);
 
 	kgsl_mem_entry_put(entry);
