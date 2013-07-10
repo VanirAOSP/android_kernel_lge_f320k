@@ -93,7 +93,7 @@ struct kgsl_functable {
 		struct kgsl_pagetable *pagetable);
 	void (*power_stats)(struct kgsl_device *device,
 		struct kgsl_power_stats *stats);
-	void (*irqctrl)(struct kgsl_device *device, int state);
+	void (*irqctrl)(struct kgsl_device *device, unsigned int mask);
 	unsigned int (*gpuid)(struct kgsl_device *device, unsigned int *chipid);
 	void * (*snapshot)(struct kgsl_device *device, void *snapshot,
 		int *remain, int hang);
@@ -172,6 +172,8 @@ struct kgsl_device {
 	struct completion hwaccess_gate;
 	const struct kgsl_functable *ftbl;
 	struct work_struct idle_check_ws;
+	struct work_struct hang_check_ws;
+	struct work_struct hang_intr_ws;
 	struct timer_list idle_timer;
 	struct kgsl_pwrctrl pwrctrl;
 	int open_count;
@@ -236,6 +238,10 @@ void kgsl_process_events(struct work_struct *work);
 	.ft_gate = COMPLETION_INITIALIZER((_dev).ft_gate),\
 	.idle_check_ws = __WORK_INITIALIZER((_dev).idle_check_ws,\
 			kgsl_idle_check),\
+	.hang_check_ws = __WORK_INITIALIZER((_dev).hang_check_ws,\
+			kgsl_hang_check),\
+	.hang_intr_ws = __WORK_INITIALIZER((_dev).hang_intr_ws,\
+			kgsl_hang_intr_work),\
 	.ts_expired_ws  = __WORK_INITIALIZER((_dev).ts_expired_ws,\
 			kgsl_process_events),\
 	.context_idr = IDR_INIT((_dev).context_idr),\
