@@ -400,8 +400,10 @@ kgsl_create_context(struct kgsl_device_private *dev_priv)
 	}
 
 	kref_init(&context->refcount);
-	context->id = id;
+	context->device = dev_priv->device;
+	context->pagetable = dev_priv->process_priv->pagetable;
 	context->dev_priv = dev_priv;
+	context->pid = dev_priv->process_priv->pid;
 
 	ret = kgsl_sync_timeline_create(context);
 	if (ret) {

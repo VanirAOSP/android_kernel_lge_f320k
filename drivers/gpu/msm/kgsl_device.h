@@ -266,8 +266,11 @@ void kgsl_process_events(struct work_struct *work);
 struct kgsl_context {
 	struct kref refcount;
 	uint32_t id;
+	pid_t pid;
 	struct kgsl_device_private *dev_priv;
-	void *devctxt;
+	unsigned long priv;
+	struct kgsl_device *device;
+	struct kgsl_pagetable *pagetable;
 	unsigned int reset_status;
 	bool wait_on_invalid_ts;
 	struct sync_timeline *timeline;
