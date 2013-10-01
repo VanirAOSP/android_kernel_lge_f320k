@@ -1436,6 +1436,14 @@ static int mmc_blk_err_check(struct mmc_card *card,
 	struct request *req = mq_mrq->req;
 	int ecc_err = 0;
 
+	#ifdef CONFIG_MACH_LGE
+	if(card->host->index == 2 && !mmc_cd_get_status(card->host))
+	{
+		printk(KERN_INFO "[LGE][MMC][%-18s( )] sd-no-exist, skip next\n", __func__);
+		return MMC_BLK_NOMEDIUM;
+	}
+	#endif
+
 	/*
 	 * sbc.error indicates a problem with the set block count
 	 * command.  No data will have been transferred.

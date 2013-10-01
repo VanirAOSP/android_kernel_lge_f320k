@@ -36,4 +36,14 @@
 #define	EDOM		33	/* Math argument out of domain of func */
 #define	ERANGE		34	/* Math result not representable */
 
+#ifdef CONFIG_MACH_LGE
+/*
+2013-07-08, G2-FS@lge.com
+add ext4 fs errno type for ext4 superblock recovery/ force recovery / journal recovery
+*/
+#define ESUPER      50 /*ext4 superblock is damaged */
+#define EFORCE      51 /*ext4 force check with e2fsck */
+#define EJOURNAL	52 /*ext4 Filesystem error recorded from previous mount, journal check with e2fsck */
+#endif
+
 #endif

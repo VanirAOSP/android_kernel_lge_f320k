@@ -25,6 +25,14 @@
 #include "mdss.h"
 #include "mdss_dsi.h"
 
+#ifdef CONFIG_MACH_LGE
+#define QMC_DMA_ERR_PATCH
+#endif
+
+#ifdef CONFIG_OLED_SUPPORT
+#include <linux/time.h>		// for using do_gettimeofday
+#endif
+
 static struct mdss_dsi_ctrl_pdata *left_ctrl_pdata;
 
 static struct mdss_dsi_ctrl_pdata *ctrl_list[DSI_CTRL_MAX];
@@ -80,6 +88,7 @@ void mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 	mutex_lock(&ctrl->mutex);
 	if (enable) {
 		if (ctrl->clk_cnt == 0) {
+			mdss_dsi_enable_bus_clocks(ctrl);
 			mdss_dsi_prepare_clocks(ctrl);
 			mdss_dsi_clk_enable(ctrl);
 		}
@@ -90,11 +99,13 @@ void mdss_dsi_clk_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 			if (ctrl->clk_cnt == 0) {
 				mdss_dsi_clk_disable(ctrl);
 				mdss_dsi_unprepare_clocks(ctrl);
+				mdss_dsi_disable_bus_clocks(ctrl);
 			}
 		}
 	}
 	pr_debug("%s: ctrl ndx=%d enabled=%d clk_cnt=%d\n",
 			__func__, ctrl->ndx, enable, ctrl->clk_cnt);
+
 	mutex_unlock(&ctrl->mutex);
 }
 
@@ -108,6 +119,7 @@ void mdss_dsi_clk_req(struct mdss_dsi_ctrl_pdata *ctrl, int enable)
 	}
 
 	mdss_dsi_clk_ctrl(ctrl, enable);
+
 }
 
 void mdss_dsi_enable_irq(struct mdss_dsi_ctrl_pdata *ctrl, u32 term)
@@ -1152,6 +1164,11 @@ int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	struct dsi_ctrl_hdr *dchdr;
 	u32 dsi_ctrl, data;
 	int i, video_mode;
+#ifdef CONFIG_OLED_SUPPORT
+	struct timeval tv_start, tv_end;
+	long tv_diff;
+	int delay_count;
+#endif
 
 	if (ctrl->shared_pdata.broadcast_enable) {
 		if (ctrl->ndx == DSI_CTRL_0) {
@@ -1195,8 +1212,23 @@ int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		mdss_dsi_cmd_dma_add(tp, cm);
 		mdss_dsi_cmd_dma_tx(ctrl, tp);
 		dchdr = &cm->dchdr;
+#ifdef CONFIG_OLED_SUPPORT
+		if(dchdr->wait) {
+			delay_count = 0;
+			do_gettimeofday(&tv_start);
+			do {
+				mdelay(1);
+				do_gettimeofday(&tv_end);
+				tv_diff = ((tv_end.tv_sec - tv_start.tv_sec) * 1000000) // sec
+						+ (tv_end.tv_usec - tv_start.tv_usec);			// usec
+				delay_count++;
+			} while(dchdr->wait * 1000 > tv_diff);
+			pr_info("%s: 0x%X needs %d(ms) delay and real delay is %ld(us), delay_count(%d).\n", __func__, cm->payload[0], (int)dchdr->wait, tv_diff, delay_count);
+		}
+#else
 		if (dchdr->wait)
 			usleep(dchdr->wait * 1000);
+#endif
 		cm++;
 	}
 
@@ -1205,6 +1237,69 @@ int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					dsi_ctrl); /* restore */
 	return cnt;
 }
+
+#ifdef CONFIG_LGE_ESD_CHECK
+/* LGE_CHANGE_S
+* change code for ESD check
+* 2013-04-08, seojin.lee@lge.com
+*/
+void mdss_dsi_cmds_mode1(struct mdss_panel_data *pdata)
+{
+	u32 dsi_ctrl, ctrl;
+	int video_mode;
+
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+
+	/* turn on cmd mode
+	* for video mode, do not send cmds more than
+	* one pixel line, since it only transmit it
+	* during BLLP.
+	*/
+
+	dsi_ctrl = MIPI_INP((ctrl_pdata->ctrl_base) + 0x0004);
+	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
+	if (video_mode) {
+		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
+		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0004, ctrl);
+	}
+
+}
+void mdss_dsi_cmds_mode2(struct mdss_panel_data *pdata)
+{
+	u32 dsi_ctrl;
+	int video_mode;
+
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	dsi_ctrl = MIPI_INP((ctrl_pdata->ctrl_base) + 0x0004);
+
+	/* turn on cmd mode
+	* for video mode, do not send cmds more than
+	* one pixel line, since it only transmit it
+	* during BLLP.
+	*/
+	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
+	if (video_mode)
+		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0004,
+						dsi_ctrl); /* restore */
+
+}
+#endif
 
 /* MIPI_DSI_MRPS, Maximum Return Packet Size */
 static char max_pktsize[2] = {0x00, 0x00}; /* LSB tx first, 10 bytes */
@@ -1234,6 +1329,9 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	struct dsi_buf *tp, *rp;
 	int no_max_pkt_size;
 	char cmd;
+	u32 dsi_ctrl;
+	u32 data;
+	int video_mode;
 
 	no_max_pkt_size = rx_flags & CMD_REQ_NO_MAX_PKT_SIZE;
 	if (no_max_pkt_size)
@@ -1259,6 +1357,13 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 		 */
 		len += 2;
 		cnt = len + 6; /* 4 bytes header + 2 bytes crc */
+	}
+
+	dsi_ctrl = MIPI_INP((ctrl->ctrl_base) + 0x0004);
+	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
+	if (video_mode) {
+		data = dsi_ctrl | 0x04; /* CMD_MODE_EN */
+		MIPI_OUTP((ctrl->ctrl_base) + 0x0004, data);
 	}
 
 	tp = &ctrl->tx_buf;
@@ -1297,6 +1402,9 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	mdss_dsi_cmd_dma_rx(ctrl, rp, cnt);
 
+	if (video_mode)
+		MIPI_OUTP((ctrl->ctrl_base) + 0x0004, dsi_ctrl); /* restore */
+		
 	if (no_max_pkt_size) {
 		/*
 		 * remove extra 2 bytes from previous
@@ -1431,6 +1539,28 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 void mdss_dsi_wait4video_done(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	unsigned long flag;
+	u32 data;
+
+#ifdef CONFIG_OLED_SUPPORT
+       data = MIPI_INP((ctrl->ctrl_base) + 0x0110);
+	data |= DSI_INTR_VIDEO_DONE_MASK;
+
+	spin_lock_irqsave(&ctrl->mdp_lock, flag);
+	INIT_COMPLETION(ctrl->video_comp);
+       MIPI_OUTP((ctrl->ctrl_base) + 0x0110, data);
+	mdss_dsi_enable_irq(ctrl, DSI_VIDEO_TERM);
+	spin_unlock_irqrestore(&ctrl->mdp_lock, flag);
+
+	wait_for_completion_timeout(&ctrl->video_comp,
+			msecs_to_jiffies(VSYNC_PERIOD * 4));
+
+       data = MIPI_INP((ctrl->ctrl_base) + 0x0110);
+	data &= ~DSI_INTR_VIDEO_DONE_MASK;
+	MIPI_OUTP((ctrl->ctrl_base) + 0x0110, data);
+#else
+	data = MIPI_INP((ctrl->ctrl_base) + 0x0004);
+	data |= DSI_INTR_VIDEO_DONE_MASK;
+	MIPI_OUTP((ctrl->ctrl_base) + 0x0110, data);
 
 	spin_lock_irqsave(&ctrl->mdp_lock, flag);
 	INIT_COMPLETION(ctrl->video_comp);
@@ -1439,6 +1569,11 @@ void mdss_dsi_wait4video_done(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	wait_for_completion_timeout(&ctrl->video_comp,
 			msecs_to_jiffies(VSYNC_PERIOD * 4));
+
+	data = MIPI_INP((ctrl->ctrl_base) + 0x0004);
+	data &= ~DSI_INTR_VIDEO_DONE_MASK;
+	MIPI_OUTP((ctrl->ctrl_base) + 0x0110, data);
+#endif
 }
 
 static void mdss_dsi_wait4video_eng_busy(struct mdss_dsi_ctrl_pdata *ctrl)

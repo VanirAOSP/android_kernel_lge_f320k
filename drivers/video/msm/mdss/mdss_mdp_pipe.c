@@ -351,6 +351,7 @@ struct mdss_mdp_pipe *mdss_mdp_pipe_get(struct mdss_data_type *mdata, u32 ndx)
 	mutex_lock(&mdss_mdp_sspp_lock);
 
 	pipe = mdss_mdp_pipe_search(mdata, ndx);
+
 	if (!pipe) {
 		pipe = ERR_PTR(-EINVAL);
 		goto error;
@@ -527,6 +528,9 @@ static int mdss_mdp_format_setup(struct mdss_mdp_pipe *pipe)
 			(fmt->unpack_align_msb << 18) |
 			((fmt->bpp - 1) << 9);
 
+#if defined(CONFIG_MACH_LGE) && defined(CONFIG_MACH_MSM8974_G2EVB)
+	opmode |= MDSS_MDP_OP_FLIP_UD;
+#endif
 	mdss_mdp_pipe_sspp_setup(pipe, &opmode);
 
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_FORMAT, src_format);
@@ -709,4 +713,9 @@ done:
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 
 	return ret;
+}
+
+int mdss_mdp_pipe_is_staged(struct mdss_mdp_pipe *pipe)
+{
+	return (pipe == pipe->mixer->stage_pipe[pipe->mixer_stage]);
 }

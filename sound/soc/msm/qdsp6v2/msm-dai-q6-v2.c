@@ -87,6 +87,13 @@ static const struct soc_enum mi2s_config_enum[] = {
 
 static DEFINE_MUTEX(aux_pcm_mutex);
 static int aux_pcm_count;
+/* LGE_CHANGE_S - QCT patch (case #01013176)
+*  add "aux_tx, aux_rx" to prevent unexpected close of AUX-AFE and clock disable
+*  2012-11-10, donggyun.kim@lge.com
+*/
+static int aux_tx;
+static int aux_rx;
+/* LGE_CHANGE_E */
 
 static int msm_dai_q6_auxpcm_hw_params(
 				struct snd_pcm_substream *substream,
@@ -153,12 +160,31 @@ static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 {
 	int rc = 0;
 	struct afe_clk_cfg *lpass_pcm_src_clk = NULL;
-	struct afe_clk_cfg lpass_pcm_oe_clk;
 	struct msm_dai_auxpcm_pdata *auxpcm_pdata = NULL;
 	unsigned int rx_port = 0;
 	unsigned int tx_port = 0;
 
 	mutex_lock(&aux_pcm_mutex);
+
+	/* LGE_CHANGE_S - QCT patch (case #01013176)
+	*  add "aux_tx, aux_rx" to prevent unexpected close of AUX-AFE and clock disable
+	*  2012-11-10, donggyun.kim@lge.com
+	*/
+	if (dai->id == AFE_PORT_ID_SECONDARY_PCM_RX)
+		aux_rx--;
+	else if (dai->id == AFE_PORT_ID_SECONDARY_PCM_TX)
+		aux_tx--;
+
+	if (aux_rx < 0) {
+		aux_rx = 0;
+		mutex_unlock(&aux_pcm_mutex);
+		return;
+	} else if (aux_tx < 0) {
+		aux_tx = 0;
+		mutex_unlock(&aux_pcm_mutex);
+		return;
+	}
+	/* LGE_CHANGE_E */
 
 	if (aux_pcm_count == 0) {
 		dev_dbg(dai->dev, "%s(): dai->id %d aux_pcm_count is 0. Just return\n",
@@ -210,10 +236,13 @@ static void msm_dai_q6_auxpcm_shutdown(struct snd_pcm_substream *substream,
 	afe_set_lpass_clock(tx_port, lpass_pcm_src_clk);
 	afe_set_lpass_clock(rx_port, lpass_pcm_src_clk);
 
-	memcpy(&lpass_pcm_oe_clk, &lpass_clk_cfg_default,
-			 sizeof(struct afe_clk_cfg));
-	lpass_pcm_oe_clk.clk_val1 = 0;
-	afe_set_lpass_clock(rx_port, &lpass_pcm_oe_clk);
+	/* LGE_CHANGE_S - QCT patch (case #01013176)
+	*  add "aux_tx, aux_rx" to prevent unexpected close of AUX-AFE and clock disable
+	*  2012-11-10, donggyun.kim@lge.com
+	*/
+	aux_rx = 0;
+	aux_tx = 0;
+	/* LGE_CHANGE_E */
 
 	mutex_unlock(&aux_pcm_mutex);
 }
@@ -225,7 +254,6 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 	struct msm_dai_auxpcm_pdata *auxpcm_pdata = NULL;
 	int rc = 0;
 	unsigned long pcm_clk_rate;
-	struct afe_clk_cfg lpass_pcm_oe_clk;
 	struct afe_clk_cfg *lpass_pcm_src_clk = NULL;
 	unsigned int rx_port = 0;
 	unsigned int tx_port = 0;
@@ -234,6 +262,16 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 	lpass_pcm_src_clk = (struct afe_clk_cfg *)auxpcm_pdata->clk_cfg;
 
 	mutex_lock(&aux_pcm_mutex);
+
+	/* LGE_CHANGE_S - QCT patch (case #01013176)
+	*  add "aux_tx, aux_rx" to prevent unexpected close of AUX-AFE and clock disable
+	*  2012-11-10, donggyun.kim@lge.com
+	*/
+	if (dai->id == AFE_PORT_ID_SECONDARY_PCM_RX)
+		aux_rx++;
+	else if (dai->id == AFE_PORT_ID_SECONDARY_PCM_TX)
+		aux_tx++;
+	/* LGE_CHANGE_E */
 
 	if (aux_pcm_count == 2) {
 		dev_dbg(dai->dev, "%s(): dai->id %d aux_pcm_count is 2. Just return.\n",
@@ -289,10 +327,6 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 			sizeof(struct afe_clk_cfg));
 	lpass_pcm_src_clk->clk_val1 = pcm_clk_rate;
 
-	memcpy(&lpass_pcm_oe_clk, &lpass_clk_cfg_default,
-			sizeof(struct afe_clk_cfg));
-	lpass_pcm_oe_clk.clk_val1 = Q6AFE_LPASS_OSR_CLK_12_P288_MHZ;
-
 	if (dai->id == AFE_PORT_ID_PRIMARY_PCM_RX ||
 			dai->id == AFE_PORT_ID_PRIMARY_PCM_TX) {
 		rx_port = AFE_PORT_ID_PRIMARY_PCM_RX;
@@ -313,13 +347,6 @@ static int msm_dai_q6_auxpcm_prepare(struct snd_pcm_substream *substream,
 	rc = afe_set_lpass_clock(tx_port, lpass_pcm_src_clk);
 	if (rc < 0) {
 		pr_err("%s:afe_set_lpass_clock on TX pcm_src_clk failed\n",
-							__func__);
-		goto fail;
-	}
-
-	rc = afe_set_lpass_clock(rx_port, &lpass_pcm_oe_clk);
-	if (rc < 0) {
-		pr_err("%s:afe_set_lpass_clock on pcm_oe_clk failed\n",
 							__func__);
 		goto fail;
 	}

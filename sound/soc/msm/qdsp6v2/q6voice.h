@@ -1355,6 +1355,7 @@ int voc_set_rxtx_port(uint16_t session_id,
 		      uint32_t dev_type);
 int voc_set_rx_vol_index(uint16_t session_id, uint32_t dir, uint32_t voc_idx);
 int voc_set_tx_mute(uint16_t session_id, uint32_t dir, uint32_t mute);
+int voc_set_phonememo_tx_mute(uint16_t session_id, uint32_t dir, uint32_t mute); //[Audio][BSP] sehwan.lee@lge.com phonememo initial code
 int voc_set_rx_device_mute(uint16_t session_id, uint32_t mute);
 int voc_get_rx_device_mute(uint16_t session_id);
 int voc_disable_cvp(uint16_t session_id);

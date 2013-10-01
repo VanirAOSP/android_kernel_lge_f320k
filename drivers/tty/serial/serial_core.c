@@ -36,6 +36,10 @@
 
 #include <asm/irq.h>
 #include <asm/uaccess.h>
+/* LGE_CHANGE_S, [BT][younghyun.kwon@lge.com], 2013-04-19, For G2 LPM */
+#ifdef CONFIG_LGE_BLUESLEEP
+#include <mach/msm_serial_hs.h>
+#endif /* CONFIG_LGE_BLUESLEEP */
 
 /*
  * This is used to lock changes in serial line configuration.
@@ -1266,6 +1270,14 @@ static void uart_close(struct tty_struct *tty, struct file *filp)
 	port = &state->port;
 
 	pr_debug("uart_close(%d) called\n", uport->line);
+
+/* LGE_CHANGE_S, [BT][younghyun.kwon@lge.com], 2013-04-19, [A1 Bluesleep]Workaround for L2 error crash */
+#ifdef CONFIG_LGE_BLUESLEEP
+	if (!strcmp(tty->name, "ttyHS99") && uport) {
+		msm_hs_request_clock_on(uport);
+	}
+#endif /* CONFIG_LGE_BLUESLEEP */
+/* LGE_CHANGE_E, [BT][younghyun.kwon@lge.com], 2013-04-19 */
 
 	if (tty_port_close_start(port, tty, filp) == 0)
 		return;

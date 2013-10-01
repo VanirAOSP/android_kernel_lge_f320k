@@ -700,6 +700,7 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	u8 count;
 	struct mmc_data *data = cmd->data;
 	unsigned target_timeout, current_timeout;
+	u32 curr_clk = 0; /* In KHz */
 
 	/*
 	 * If the host controller provides us with an incorrect timeout
@@ -734,7 +735,14 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd)
 	 *     (1) / (2) > 2^6
 	 */
 	count = 0;
-	current_timeout = (1 << 13) * 1000 / host->timeout_clk;
+	if (host->quirks2 & SDHCI_QUIRK2_ALWAYS_USE_BASE_CLOCK) {
+		curr_clk = host->clock / 1000;
+		if (host->quirks2 & SDHCI_QUIRK2_DIVIDE_TOUT_BY_4)
+			curr_clk /= 4;
+		current_timeout = (1 << 13) * 1000 / curr_clk;
+	} else {
+		current_timeout = (1 << 13) * 1000 / host->timeout_clk;
+	}
 	while (current_timeout < target_timeout) {
 		count++;
 		current_timeout <<= 1;
@@ -1488,9 +1496,11 @@ static void sdhci_do_set_ios(struct sdhci_host *host, struct mmc_ios *ios)
 	int vdd_bit = -1;
 	u8 ctrl;
 
+	mutex_lock(&host->ios_mutex);
 	if (host->flags & SDHCI_DEVICE_DEAD) {
 		if (host->vmmc && ios->power_mode == MMC_POWER_OFF)
 			mmc_regulator_set_ocr(host->mmc, host->vmmc, 0);
+		mutex_unlock(&host->ios_mutex);
 		return;
 	}
 
@@ -1500,6 +1510,7 @@ static void sdhci_do_set_ios(struct sdhci_host *host, struct mmc_ios *ios)
 	spin_lock_irqsave(&host->lock, flags);
 	if (!host->clock) {
 		spin_unlock_irqrestore(&host->lock, flags);
+		mutex_unlock(&host->ios_mutex);
 		return;
 	}
 	spin_unlock_irqrestore(&host->lock, flags);
@@ -1656,6 +1667,7 @@ static void sdhci_do_set_ios(struct sdhci_host *host, struct mmc_ios *ios)
 		sdhci_set_clock(host, ios->clock);
 
 	mmiowb();
+	mutex_unlock(&host->ios_mutex);
 }
 
 static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
@@ -1852,8 +1864,16 @@ static int sdhci_do_start_signal_voltage_switch(struct sdhci_host *host,
 		if (host->ops->check_power_status)
 			host->ops->check_power_status(host, REQ_BUS_OFF);
 
+		#ifdef CONFIG_MACH_LGE
+		/* LGU_UPDATE, 2013/07/17, G2-FS@lge.com
+		 * It maybe need more time.
+		 */
+		 usleep_range(10000, 15000);
+		#else
 		/* Wait for 1ms as per the spec */
 		usleep_range(1000, 1500);
+		#endif
+
 		pwr |= SDHCI_POWER_ON;
 		sdhci_writeb(host, pwr, SDHCI_POWER_CONTROL);
 		if (host->ops->check_power_status)
@@ -1877,6 +1897,19 @@ static int sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 		return 0;
 	sdhci_runtime_pm_get(host);
 	err = sdhci_do_start_signal_voltage_switch(host, ios);
+
+	#ifdef CONFIG_MACH_LGE
+	/* LGE_UPDATE, 2013/07/17, G2-FS@lge.com
+	 * When err is -EAGAIN, baby one more time.
+	 */
+	if(err == -EAGAIN )
+	{
+		usleep_range(5000, 5500);
+		err = sdhci_do_start_signal_voltage_switch(host, ios);
+		printk(KERN_INFO "[LGE][MMC][%-18s( )] check-point : %d)\n", __func__, err);
+	}
+	#endif
+
 	sdhci_runtime_pm_put(host);
 	return err;
 }
@@ -2890,6 +2923,7 @@ struct sdhci_host *sdhci_alloc_host(struct device *dev,
 	host->mmc = mmc;
 
 	spin_lock_init(&host->lock);
+	mutex_init(&host->ios_mutex);
 
 	return host;
 }

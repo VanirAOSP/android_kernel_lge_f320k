@@ -27,6 +27,13 @@
 #include "clock-mdss-8974.h"
 
 #define REG_R(addr)			readl_relaxed(addr)
+#ifdef CONFIG_MACH_LGE
+/* LGE_CHANGE
+* This is for auto pll patch from case#01156220
+* 2013-05-25, baryun.hwang@lge.com
+*/
+#define QCT_AUTO_PLL_PATCH
+#endif
 #define REG_W(data, addr)		writel_relaxed(data, addr)
 #define DSS_REG_W(base, offset, data)	REG_W((data), (base) + (offset))
 #define DSS_REG_R(base, offset)		REG_R((base) + (offset))
@@ -1104,7 +1111,7 @@ static int dsi_pll_enable_seq_8974(void)
 	}
 
 	if ((status & 0x01) != 1) {
-		pr_debug("%s: DSI PLL status=%x failed to Lock\n",
+		pr_err("%s: DSI PLL status=%x failed to Lock\n",
 		       __func__, status);
 		rc = -EINVAL;
 		goto error;

@@ -127,6 +127,10 @@
 #define QPNP_RSENSE_MSB_SIGN_CHECK			0x80
 #define QPNP_ADC_COMPLETION_TIMEOUT			HZ
 
+#if 0 /* FixMe */
+extern int32_t qpnp_adc_get_devicetree_data(struct spmi_device *spmi,
+					struct qpnp_adc_drv *adc_qpnp);
+#endif 
 struct qpnp_iadc_comp {
 	bool	ext_rsense;
 	u8	id;

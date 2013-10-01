@@ -46,6 +46,9 @@ struct hdmi_tx_ctrl {
 	int audio_sample_rate;
 
 	struct mutex mutex;
+#ifdef CONFIG_SLIMPORT_DYNAMIC_HPD
+	struct mutex mutex_hpd;
+#endif
 	struct kobject *kobj;
 	struct switch_dev sdev;
 	struct switch_dev audio_sdev;
@@ -78,5 +81,7 @@ struct hdmi_tx_ctrl {
 
 	void *feature_data[HDMI_TX_FEAT_MAX];
 };
-
+#ifdef CONFIG_SLIMPORT_ANX7808
+bool is_slimport_vga(void);
+#endif
 #endif /* __MDSS_HDMI_TX_H__ */

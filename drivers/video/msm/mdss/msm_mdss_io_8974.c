@@ -237,9 +237,25 @@ void mdss_dsi_clk_enable(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 		return;
 	}
 
+#ifdef CONFIG_OLED_SUPPORT
+	if (!ctrl_pdata->panel_data.panel_info.cont_splash_enabled) {
+		pr_debug("%s: Set clk rates: pclk=%d, byteclk=%d escclk=%d\n",
+			__func__, ctrl_pdata->pclk_rate, ctrl_pdata->byte_clk_rate, esc_clk_rate);
+
+		if (clk_set_rate(ctrl_pdata->esc_clk, esc_clk_rate) < 0)
+			pr_err("%s: dsi_esc_clk - clk_set_rate failed\n", __func__);
+
+		if (clk_set_rate(ctrl_pdata->byte_clk, ctrl_pdata->byte_clk_rate) < 0)
+			pr_err("%s: dsi_byte_clk - clk_set_rate failed\n", __func__);
+
+		if (clk_set_rate(ctrl_pdata->pixel_clk, ctrl_pdata->pclk_rate) < 0)
+			pr_err("%s: dsi_pixel_clk - clk_set_rate failed\n", __func__);
+	}
+#else
 	pr_debug("%s: Setting clock rates: pclk=%d, byteclk=%d escclk=%d\n",
 			__func__, ctrl_pdata->pclk_rate,
 			ctrl_pdata->byte_clk_rate, esc_clk_rate);
+
 	if (clk_set_rate(ctrl_pdata->esc_clk, esc_clk_rate) < 0)
 		pr_err("%s: dsi_esc_clk - clk_set_rate failed\n", __func__);
 
@@ -248,6 +264,7 @@ void mdss_dsi_clk_enable(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 
 	if (clk_set_rate(ctrl_pdata->pixel_clk, ctrl_pdata->pclk_rate) < 0)
 		pr_err("%s: dsi_pixel_clk - clk_set_rate failed\n", __func__);
+#endif
 
 	clk_enable(ctrl_pdata->esc_clk);
 	clk_enable(ctrl_pdata->byte_clk);
@@ -343,6 +360,9 @@ void mdss_dsi_phy_init(struct mdss_panel_data *pdata)
 	pd = ((ctrl_pdata->panel_data).panel_info.mipi).dsi_phy_db;
 
 	/* Strength ctrl 0 */
+#ifdef CONFIG_OLED_SUPPORT
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0484, 0x07);
+#endif
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0484, pd->strength[0]);
 
 	/* phy regulator ctrl settings. Both the DSI controller
@@ -351,9 +371,10 @@ void mdss_dsi_phy_init(struct mdss_panel_data *pdata)
 		off = 0x0580;
 	else
 		off = 0x0580 - 0x600;
-
+#ifndef CONFIG_OLED_SUPPORT
 	/* Regulator ctrl 0 */
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + off + (4 * 0), 0x0);
+#endif
 	/* Regulator ctrl - CAL_PWR_CFG */
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + off + (4 * 6), pd->regulator[6]);
 
@@ -369,13 +390,14 @@ void mdss_dsi_phy_init(struct mdss_panel_data *pdata)
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + off + (4 * 0), pd->regulator[0]);
 	/* Regulator ctrl 4 */
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + off + (4 * 4), pd->regulator[4]);
+#ifndef CONFIG_OLED_SUPPORT
 
 	/* LDO ctrl 0 */
 	if ((ctrl_pdata->panel_data).panel_info.pdest == DISPLAY_1)
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x4dc, 0x00);
 	else
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x4dc, 0x00);
-
+#endif
 	off = 0x0440;	/* phy timing ctrl 0 - 11 */
 	for (i = 0; i < 12; i++) {
 		MIPI_OUTP((ctrl_pdata->ctrl_base) + off, pd->timing[i]);
@@ -407,7 +429,11 @@ void mdss_dsi_phy_init(struct mdss_panel_data *pdata)
 	}
 
 	/* MMSS_DSI_0_PHY_DSIPHY_CTRL_0 */
+#ifndef CONFIG_OLED_SUPPORT
 	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0470, 0x5f);
+#else
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0470, 0x7f);
+#endif
 	wmb();
 
 	/* DSI_0_PHY_DSIPHY_GLBL_TEST_CTRL */

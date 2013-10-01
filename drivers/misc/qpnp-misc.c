@@ -63,6 +63,59 @@ static u8 qpnp_read_byte(struct spmi_device *spmi, u16 addr)
 	return val;
 }
 
+#ifdef CONFIG_SMB349_CHARGER
+struct spmi_device		*the_spmi;
+static int
+smb349_qpnp_write(struct spmi_device *spmi, u16 addr, u8 val)
+{
+	int rc;
+
+	rc = spmi_ext_register_writel(spmi->ctrl, spmi->sid, addr, &val, 1);
+	if (rc) {
+		pr_err("spmi write failed: addr=%03X, rc=%d\n", addr, rc);
+		return rc;
+	}
+
+	return 0;
+}
+int smb349_pmic_usb_override(bool mode)
+{
+	int rc;
+
+	if (!the_spmi) {
+		pr_err("fail to override spmi not init\n");
+		return -ENODEV;
+	}
+	if (mode) {
+		/* charger insert case */
+		rc = smb349_qpnp_write(the_spmi, 0x13D0, 0xA5);
+		if (rc) {
+			pr_err("failed to write pmic 0x13D0 ret:%d\n", rc);
+			return rc;
+		}
+		rc = smb349_qpnp_write(the_spmi, 0x13EA, 0x2F);
+		if (rc) {
+			pr_err("failed to write pmic 0x13EA ret:%d\n", rc);
+			return rc;
+		}
+	} else {
+		/* charser remove case */
+		rc = smb349_qpnp_write(the_spmi, 0x13D0, 0xA5);
+		if (rc) {
+			pr_err("failed to write pmic 0x13D0 ret:%d\n", rc);
+			return rc;
+		}
+		rc = smb349_qpnp_write(the_spmi, 0x13EA, 0x00);
+		if (rc) {
+			pr_err("failed to write pmic 0x13D0 ret:%d\n", rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+#endif
+
 #define REV2_IRQ_AVAILABLE_VERSION	2
 static bool __misc_irqs_available(struct qpnp_misc_dev *dev)
 {
@@ -131,6 +184,9 @@ static int __devinit qpnp_misc_probe(struct spmi_device *spmi)
 	mdev->spmi = spmi;
 	mdev->dev = &(spmi->dev);
 	mdev->resource = resource;
+#ifdef CONFIG_SMB349_CHARGER
+	the_spmi = spmi;
+#endif
 
 	mutex_lock(&qpnp_misc_dev_list_mutex);
 	list_add_tail(&mdev->list, &qpnp_misc_dev_list);

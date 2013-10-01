@@ -389,9 +389,18 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 		vunmap(memdesc->hostptr);
 		kgsl_driver.stats.vmalloc -= memdesc->size;
 	}
+#ifdef CONFIG_LGE_MEMORY_INFO
+	if (memdesc->sg)
+		for_each_sg(memdesc->sg, sg, sglen, i) {
+			__mod_zone_page_state(page_zone(sg_page(sg)), NR_KGSL_PAGES,
+							  - (1UL << get_order(sg->length)));
+			__free_pages(sg_page(sg), get_order(sg->length));
+		}
+#else
 	if (memdesc->sg)
 		for_each_sg(memdesc->sg, sg, sglen, i)
 			__free_pages(sg_page(sg), get_order(sg->length));
+#endif
 }
 
 static int kgsl_contiguous_vmflags(struct kgsl_memdesc *memdesc)
@@ -643,6 +652,11 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 			goto done;
 		}
 
+#ifdef CONFIG_LGE_MEMORY_INFO
+		__mod_zone_page_state(page_zone(page), NR_KGSL_PAGES,
+							  (1UL << get_order(page_size)));
+#endif
+
 		for (j = 0; j < page_size >> PAGE_SHIFT; j++)
 			pages[pcount++] = nth_page(page, j);
 
@@ -650,6 +664,30 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 		len -= page_size;
 	}
 
+#if 0 /* FixMe : Delete this code from CS */
+	/* Add the guard page to the end of the sglist */
+
+	if (kgsl_mmu_get_mmutype() == KGSL_MMU_TYPE_IOMMU) {
+		/*
+		 * It doesn't matter if we use GFP_ZERO here, this never
+		 * gets mapped, and we only allocate it once in the life
+		 * of the system
+		 */
+
+		if (kgsl_guard_page == NULL)
+			kgsl_guard_page = alloc_page(GFP_KERNEL | __GFP_ZERO |
+				__GFP_HIGHMEM);
+#ifdef CONFIG_LGE_MEMORY_INFO
+		__inc_zone_page_state(kgsl_guard_page, NR_KGSL_PAGES);
+#endif
+
+		if (kgsl_guard_page != NULL) {
+			sg_set_page(&memdesc->sg[sglen++], kgsl_guard_page,
+				PAGE_SIZE, 0);
+			memdesc->priv |= KGSL_MEMDESC_GUARD_PAGE;
+		}
+	}
+#endif
 	memdesc->sglen = sglen;
 
 	/*
