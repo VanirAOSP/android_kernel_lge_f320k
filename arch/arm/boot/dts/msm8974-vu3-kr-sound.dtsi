@@ -80,6 +80,5 @@
 		qcom,cdc-vddcx-2-voltage = <0x12b128 0x12b128>;
 		qcom,cdc-vddpx-1-current = <0x2710>;
 		qcom,cdc-vddpx-1-voltage = <0x1b7740 0x1b7740>;
->>>>>>> Update device tree to att release
 	};
 };

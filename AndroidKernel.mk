@@ -11,7 +11,14 @@ KERNEL_MODULES_INSTALL := system
 KERNEL_MODULES_OUT := $(TARGET_OUT)/lib/modules
 KERNEL_IMG=$(KERNEL_OUT)/arch/arm/boot/Image
 
+USE_LGE_BOARD ?= $(shell $(PERL) -e '$$somc = "n"; while (<>) { if (/CONFIG_MACH_LGE_.+=y/) { $$somc = "y"; break } } print $$somc;' kernel/arch/arm/configs/$(KERNEL_DEFCONFIG))
+
+ifeq "$(USE_LGE_BOARD)" "y"
+DTS_TARGET ?= $(shell echo $(KERNEL_DEFCONFIG) | sed -e "s/_defconfig//" | sed -e "s/cyanogenmod_//")
+DTS_NAMES ?= $(shell echo $(KERNEL_DEFCONFIG) | sed -e "s/_defconfig//" | sed -e "s/cyanogenmod_//")
+else
 DTS_NAMES ?= $(shell $(PERL) -e 'while (<>) {$$a = $$1 if /CONFIG_ARCH_((?:MSM|QSD|MPQ)[a-zA-Z0-9]+)=y/; $$r = $$1 if /CONFIG_MSM_SOC_REV_(?!NONE)(\w+)=y/; $$arch = $$arch.lc("$$a$$r ") if /CONFIG_ARCH_((?:MSM|QSD|MPQ)[a-zA-Z0-9]+)=y/} print $$arch;' $(KERNEL_CONFIG))
+endif
 KERNEL_USE_OF ?= $(shell $(PERL) -e '$$of = "n"; while (<>) { if (/CONFIG_USE_OF=y/) { $$of = "y"; break; } } print $$of;' kernel/arch/arm/configs/$(KERNEL_DEFCONFIG))
 
 ifeq "$(KERNEL_USE_OF)" "y"
