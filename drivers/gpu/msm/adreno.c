@@ -1887,7 +1887,7 @@ static int _mark_context_status(int id, void *ptr, void *data)
 {
 	unsigned int ft_status = *((unsigned int *) data);
 	struct kgsl_context *context = ptr;
-	struct adreno_context *adreno_context = context->devctxt;
+	struct adreno_context *adreno_context = ADRENO_CONTEXT(context);
 
 	if (ft_status) {
 		context->reset_status =
@@ -1928,7 +1928,7 @@ static int _set_max_ts(int id, void *ptr, void *data)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffer;
 	struct kgsl_context *context = ptr;
-	struct adreno_context *drawctxt = context->devctxt;
+	struct adreno_context *drawctxt = ADRENO_CONTEXT(context);
 
 	if (drawctxt->flags & CTXT_FLAGS_GPU_HANG) {
 		kgsl_sharedmem_writel(device, &device->memstore,

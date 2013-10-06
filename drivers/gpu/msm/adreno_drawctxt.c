@@ -191,7 +191,6 @@ adreno_drawctxt_create(struct kgsl_device_private *dev_priv,
 
 	drawctxt->type =
 		(*flags & KGSL_CONTEXT_TYPE_MASK) >> KGSL_CONTEXT_TYPE_SHIFT;
-	drawctxt->dev_priv = context->dev_priv;
 
 	ret = adreno_dev->gpudev->ctxt_create(adreno_dev, drawctxt);
 	if (ret)
