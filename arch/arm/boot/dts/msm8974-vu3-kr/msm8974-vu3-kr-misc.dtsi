@@ -25,6 +25,7 @@
 		revision = "...";
 		hallic-pen-irq-gpio = <&msmgpio 144 0x00>;
 		hallic-pouch-irq-gpio = <&msmgpio 102 0x00>;
+		reg = <0x0 0x0>;
 	};
 
 	uei_irrc {
