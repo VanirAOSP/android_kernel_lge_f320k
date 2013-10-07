@@ -64,6 +64,7 @@
 		sony,hvdd-gpio = <&msmgpio 145 0x00>;	
 		sony,intu-gpio = <&msmgpio 59 0x00>;	
 		sony,rfs-gpio = <&msmgpio 102 0x00>;
+		sony,uicc_con = <&msmgpio 25 0x00>;
 	};
 	sony_uart_con_before_rev_b {
 		compatible = "sony,driver";
@@ -76,5 +77,6 @@
 		sony,hvdd-gpio = <&msmgpio 145 0x00>;	
 		sony,intu-gpio = <&msmgpio 94 0x00>;	
 		sony,rfs-gpio = <&msmgpio 102 0x00>;
+		sony,uicc_con = <&msmgpio 25 0x00>;
 	};	
 };

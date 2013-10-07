@@ -20,6 +20,7 @@
 /include/ "msm8974-z-kr-tdmb.dtsi"
 /include/ "msm8974-z-kr-nfc.dtsi" /* [NFC][wongab.jeon@lge.com], 2013-02-13, NFC Bring up */
 /include/ "msm8974-z-kr-sound.dtsi"
+/include/ "msm8974-z-kr-lp5521.dtsi"
 
 &soc {
 	serial@f991d000 {
@@ -35,6 +36,9 @@
 		bcm2079x@77 {
 			status = "ok";
 		};
+		lp5521@32 {
+			status = "ok";
+		};		
 	};
 	/*  LGE_CHANGE_E, [NFC][wongab.jeon@lge.com], 2013-02-13, NFC Bring up */
 
