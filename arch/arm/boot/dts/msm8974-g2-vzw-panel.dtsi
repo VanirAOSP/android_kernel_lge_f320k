@@ -18,11 +18,26 @@
 
 	qcom,mdss_dsi_lgit_cmd {
 		status = "disable";
-		lge,mdss-dsi-bit-rate = <964000000>;
+		lge,mdss-dsi-bit-rate = <980000000>;
 		qcom,mdss-pan-dsi-t-clk = <0x1E 0x37>;
+		qcom,panel-phy-regulatorSettings = [
+			07 09 03 00  /* Regualotor settings */
+			20 00 01];
 		qcom,panel-phy-timingSettings = [
-			D1 4A 3D 00 65 59
-			40 4C 62 03 04 00];
+			CC 4C 40 00 68 60
+			3F 4E 64 03 04 00];
+		qcom,panel-phy-strengthCtrl = [
+			ff 06];
+		qcom,panel-phy-bistCtrl = [
+			00 00 b1 ff           /* BIST Ctrl settings */
+			00 00];
+		qcom,panel-phy-laneConfig =
+			[00 00 00 00 00 00 00 01 97 /* lane0 config */
+			00 00 00 00 05 00 00 01 97 /* lane1 config */
+			00 00 00 00 0a 00 00 01 97 /* lane2 config */
+			00 00 00 00 0f 00 00 01 97 /* lane3 config */
+			00 c0 00 00 00 00 00 01 bb]; /* Clk ln config */
+
 	};
 
 	qcom,mdss_dsi_jdi_cmd {

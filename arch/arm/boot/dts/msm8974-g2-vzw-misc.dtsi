@@ -34,7 +34,7 @@
 		interrupt-parent = <&msmgpio>;
 		interrupts = <35 0x0>;
 		hallic-camera-irq-gpio = <&msmgpio 0 0x00>;
-		hallic-pouch-irq-gpio = <&msmgpio 35 0x00>;
+		hallic-pouch-irq-gpio = <&msmgpio 0 0x00>;
 		status = "ok";
 		revision = "rev_e...";
 	};

@@ -14,24 +14,8 @@
 	i2c@f9923000 {
 		max17048@36 {
 			status =  "ok";
-			revision = "rev_b";
 			interrupts = <91 0x0>;
 			max17048,alert_gpio = <&msmgpio 91 0x00>;
-			max17048,rcomp = <96>;
-			max17048,temp_co_hot = <25>;
-			max17048,temp_co_cold = <7400>;
-			max17048,full_design = <2540>;
-		};
-
-		max17048_rev_c@36 {
-			compatible = "maxim,max17048";
-			status =  "ok";
-			revision = "rev_c...";
-			reg = <0x36>;
-			interrupt-parent = <&pm8941_gpios>;
-			interrupts = <20 0x0>;
-			max17048,alert_gpio = <&pm8941_gpios 20 0x00>;
-			max17048,alert_threshold = <2>;
 			max17048,rcomp = <96>;
 			max17048,temp_co_hot = <25>;
 			max17048,temp_co_cold = <7400>;
@@ -88,13 +72,14 @@
 	qcom,pm8941@0 {
 		pm8941_chg: qcom,charger {
 			status = "ok";
-			qcom,vbatdet-delta-mv = <50>;
-			qcom,ibatterm-ma = <100>;
+			qcom,vbatdet-delta-mv = <100>;
+			qcom,ibatterm-ma = <150>;
 			qcom,tchg-mins = <480>;
 			qcom,ibatmax-ma = <1800>;
 			qcom,ibatsafe-ma = <1800>;
 			qcom,vddmax-mv = <4350>;
-			qcom,vddsafe-mv = <4380>;
+			qcom,vddsafe-mv = <4350>;
+			qcom,vbatdet-mv = <4100>;
 			qcom,bpd-detection = "bpd_thm";
 
 			otg-parent-supply = <&pm8941_boost>;
@@ -308,12 +293,6 @@
 	};
 
 	gpio@d300 { /* GPIO 20 */
-		status = "ok";
-		qcom,mode = <0>;		/* QPNP_PIN_MODE_DIG_IN */
-		qcom,pull = <0>;		/* QPNP_PIN_PULL_UP_30 */
-		qcom,vin-sel = <2>;		/* QPNP_PIN_VIN2 */
-		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
-		qcom,master-en = <1>;
 	};
 
 	gpio@d400 { /* GPIO 21 */

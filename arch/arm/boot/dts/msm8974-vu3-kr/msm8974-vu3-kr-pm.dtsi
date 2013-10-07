@@ -34,18 +34,14 @@
 			status = "ok";
 			qcom,vddsafe-mv = <4380>;
 			qcom,vbatdet-delta-mv = <100>;
-			qcom,ibatterm-ma = <100>;
+			qcom,ibatterm-ma = <150>;
 			qcom,tchg-mins = <480>;
-			qcom,maxinput-dc-ma = <700>;
+			qcom,maxinput-dc-ma = <600>;
 			qcom,bpd-detection = "bpd_thm";
-			qcom,cool-bat-decidegc = <0>;
-			qcom,warm-bat-decidegc = <0>;
 
-			lge,cable-130k = <340000 500 500>;
 			lge,cable-none = <1900000 1300  500>;
 			wlc_track = <&msmgpio 24 0>;
 			wlc_full_chg = <&pm8941_gpios 36 0>;
-			otg-parent-supply = <&pm8941_boost>;
 
 			qcom,chgr@1000 {
 				status = "ok";
@@ -59,19 +55,16 @@
 				status = "ok";
 			};
 
-			pm8941_chg_otg: qcom,usb-chgpth@1300 {
+			qcom,usb-chgpth@1300 {
 				status = "ok";
-				regulator-name = "8941_smbb_otg";
 			};
 
 			qcom,dc-chgpth@1400 {
 				status = "ok";
 			};
 
-			pm8941_chg_boost: qcom,boost@1500 {
+			qcom,boost@1500 {
 				status = "ok";
-				regulator-min-microvolt = <5000000>;
-				regulator-max-microvolt = <5000000>;
 			};
 
 			qcom,chg-misc@1600 {
@@ -134,9 +127,6 @@
 				qcom,row-scan-val = <0x01>;
 			};
 		};
-	    pm8941_mvs1: regulator@8300 {
-		parent-supply = <&pm8941_chg_otg>;
-	    };
 	};
 };
 

@@ -97,7 +97,8 @@
 		};
 
 		qcom,currentnow@3800 {
-			status = "disable";
+			status = "ok";
+			revision = "rev_b";
 		};
 	};
 };
@@ -360,14 +361,6 @@
 	};
 
 	mpp@a600 { /* MPP 7 */
-		status = "ok";			/* rgb_led en for lp5521 */
-		qcom,mode = <1>;		/* QPNP_PIN_MODE_DIG_OUT */
-		qcom,output-type = <0>;		/* QPNP_PIN_OUT_BUF_CMOS */
-		qcom,pull = <5>;		/* QPNP_PIN_PULL_NO */
-		qcom,vin-sel = <2>;		/* QPNP_PIN_VIN0 1.8V */
-		qcom,out-strength = <2>;	/* QPNP_PIN_OUT_STRENGTH_MED */
-		qcom,src-sel = <0>;		/* QPNP_PIN_SEL_FUNC_CONSTANT */
-		qcom,master-en = <1>;		
 	};
 
 	mpp@a700 { /* MPP 8 */

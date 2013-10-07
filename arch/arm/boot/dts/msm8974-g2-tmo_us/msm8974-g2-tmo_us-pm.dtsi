@@ -15,9 +15,9 @@
 		max17048@36 {
 			status =  "ok";
 			revision = "rev_a...";
-			max17048,rcomp = <106>;
-			max17048,temp_co_hot = <875>;
-			max17048,temp_co_cold = <7450>;
+			max17048,rcomp = <104>;
+			max17048,temp_co_hot = <975>;
+			max17048,temp_co_cold = <7150>;
 			max17048,full_design = <3000>;
 		};
 

@@ -124,7 +124,7 @@
 						1 &intc 0 221 0
 						2 &msmgpio 95 0x3>;
 		interrupt-names = "hc_irq", "pwr_irq", "status_irq";
-		cd-gpios = <&msmgpio 95 0x1>; /* 1:Low-Active, 0:High-Active */
+		cd-gpios = <&msmgpio 95 0x0>; /* 1:Low-Active, 0:High-Active */
 
 		vdd-supply = <&pm8941_l21>;
 		vdd-io-supply = <&pm8941_l13>;
