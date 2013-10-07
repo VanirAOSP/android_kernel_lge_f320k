@@ -49,6 +49,8 @@
 #define QCT_AUTO_PLL_PATCH
 #define QCT_UNDERRUN_PATCH
 #endif
+/* wait for at most 2 vsync for lowest refresh rate (24hz) */
+#define KOFF_TIMEOUT msecs_to_jiffies(84)
 
 #ifdef MDSS_MDP_DEBUG_REG
 static inline void mdss_mdp_reg_write(u32 addr, u32 val)
@@ -361,8 +363,6 @@ struct mdss_mdp_writeback_arg {
 struct mdss_overlay_private {
 	int vsync_pending;
 	ktime_t vsync_time;
-	struct completion vsync_comp;
-	spinlock_t vsync_lock;
 	int borderfill_enable;
 	int overlay_play_enable;
 	int hw_refresh;
@@ -375,6 +375,7 @@ struct mdss_overlay_private {
 	struct list_head overlay_list;
 	struct list_head pipes_used;
 	struct list_head pipes_cleanup;
+	struct work_struct vsync_work;
 	bool mixer_swap;
 };
 

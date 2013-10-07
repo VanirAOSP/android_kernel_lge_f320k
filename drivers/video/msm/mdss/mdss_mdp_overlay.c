@@ -180,22 +180,6 @@ static int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 			return -EINVAL;
 		}
 
-		if ((fmt->chroma_sample == MDSS_MDP_CHROMA_420 ||
-		     fmt->chroma_sample == MDSS_MDP_CHROMA_H2V1) &&
-		    ((req->src_rect.w * (MAX_UPSCALE_RATIO / 2)) < dst_w)) {
-			pr_err("too much YUV upscaling Width %d->%d\n",
-			       req->src_rect.w, req->dst_rect.w);
-			return -EINVAL;
-		}
-
-		if ((fmt->chroma_sample == MDSS_MDP_CHROMA_420 ||
-		     fmt->chroma_sample == MDSS_MDP_CHROMA_H1V2) &&
-		    (req->src_rect.h * (MAX_UPSCALE_RATIO / 2)) < dst_h) {
-			pr_err("too much YUV upscaling Height %d->%d\n",
-			       req->src_rect.h, req->dst_rect.h);
-			return -EINVAL;
-		}
-
 		if (req->flags & MDP_BWC_EN) {
 			if ((req->src.width != req->src_rect.w) ||
 			    (req->src.height != req->src_rect.h)) {
@@ -294,7 +278,7 @@ static int mdss_mdp_overlay_rotator_setup(struct msm_fb_data_type *mfd,
 		req->id = rot->session_id;
 	} else {
 		pr_err("Unable to setup rotator session\n");
-		mdss_mdp_rotator_release(rot->session_id);
+		mdss_mdp_rotator_release(rot);
 	}
 
 	return ret;
@@ -940,10 +924,17 @@ static int mdss_mdp_overlay_unset(struct msm_fb_data_type *mfd, int ndx)
 
 	pr_debug("unset ndx=%x\n", ndx);
 
-	if (ndx & MDSS_MDP_ROT_SESSION_MASK)
-		ret = mdss_mdp_rotator_release(ndx);
-	else
+	if (ndx & MDSS_MDP_ROT_SESSION_MASK) {
+		struct mdss_mdp_rotator_session *rot;
+		rot = mdss_mdp_rotator_session_get(ndx);
+		if (rot) {
+			mdss_mdp_overlay_free_buf(&rot->src_buf);
+			mdss_mdp_overlay_free_buf(&rot->dst_buf);
+			ret = mdss_mdp_rotator_release(rot);
+		}
+	} else {
 		ret = mdss_mdp_overlay_release(mfd, ndx);
+	}
 
 done:
 	mutex_unlock(&mdp5_data->ov_lock);
@@ -1004,7 +995,6 @@ static int mdss_mdp_overlay_rotate(struct msm_fb_data_type *mfd,
 				   struct msmfb_overlay_data *req)
 {
 	struct mdss_mdp_rotator_session *rot;
-	struct mdss_mdp_data src_data, dst_data;
 	int ret;
 	u32 flgs;
 
@@ -1016,26 +1006,26 @@ static int mdss_mdp_overlay_rotate(struct msm_fb_data_type *mfd,
 
 	flgs = rot->flags & MDP_SECURE_OVERLAY_SESSION;
 
-	ret = mdss_mdp_overlay_get_buf(mfd, &src_data, &req->data, 1, flgs);
+	mdss_mdp_overlay_free_buf(&rot->src_buf);
+	ret = mdss_mdp_overlay_get_buf(mfd, &rot->src_buf, &req->data, 1, flgs);
 	if (ret) {
 		pr_err("src_data pmem error\n");
 		return ret;
 	}
 
-	ret = mdss_mdp_overlay_get_buf(mfd, &dst_data, &req->dst_data, 1, flgs);
+	mdss_mdp_overlay_free_buf(&rot->dst_buf);
+	ret = mdss_mdp_overlay_get_buf(mfd, &rot->dst_buf,
+			&req->dst_data, 1, flgs);
 	if (ret) {
 		pr_err("dst_data pmem error\n");
 		goto dst_buf_fail;
 	}
 
-	ret = mdss_mdp_rotator_queue(rot, &src_data, &dst_data);
+	ret = mdss_mdp_rotator_queue(rot, &rot->src_buf, &rot->dst_buf);
 	if (ret)
 		pr_err("rotator queue error session id=%x\n", req->id);
 
-	mdss_mdp_overlay_free_buf(&dst_data);
 dst_buf_fail:
-	mdss_mdp_overlay_free_buf(&src_data);
-
 	return ret;
 }
 
@@ -1332,6 +1322,15 @@ pan_display_error:
 	mutex_unlock(&mdp5_data->ov_lock);
 }
 
+static void mdss_mdp_overlay_dispatch_vsync(struct work_struct *work)
+{
+	struct mdss_overlay_private *mdp5_data;
+	mdp5_data = container_of(work, struct mdss_overlay_private, vsync_work);
+	if (mdp5_data->ctl && mdp5_data->ctl->mfd)
+		sysfs_notify(&mdp5_data->ctl->mfd->fbi->dev->kobj, NULL,
+				"vsync_event");
+}
+
 /* function is called in irq context should have minimum processing */
 static void mdss_mdp_overlay_handle_vsync(struct mdss_mdp_ctl *ctl,
 						ktime_t t)
@@ -1347,17 +1346,14 @@ static void mdss_mdp_overlay_handle_vsync(struct mdss_mdp_ctl *ctl,
 	mdp5_data = mfd_to_mdp5_data(mfd);
 	pr_debug("vsync on fb%d play_cnt=%d\n", mfd->index, ctl->play_cnt);
 
-	spin_lock(&mdp5_data->vsync_lock);
 	mdp5_data->vsync_time = t;
-	complete(&mdp5_data->vsync_comp);
-	spin_unlock(&mdp5_data->vsync_lock);
+	schedule_work(&mdp5_data->vsync_work);
 }
 
 int mdss_mdp_overlay_vsync_ctrl(struct msm_fb_data_type *mfd, int en)
 {
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
 	struct mdss_mdp_ctl *ctl = mfd_to_ctl(mfd);
-	unsigned long flags;
 	int rc;
 
 	if (!ctl)
@@ -1379,10 +1375,6 @@ int mdss_mdp_overlay_vsync_ctrl(struct msm_fb_data_type *mfd, int en)
 
 	pr_debug("fb%d vsync en=%d\n", mfd->index, en);
 
-	spin_lock_irqsave(&mdp5_data->vsync_lock, flags);
-	INIT_COMPLETION(mdp5_data->vsync_comp);
-	spin_unlock_irqrestore(&mdp5_data->vsync_lock, flags);
-
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
 	if (en)
 		rc = ctl->add_vsync_handler(ctl, &ctl->vsync_handler);
@@ -1401,29 +1393,16 @@ static ssize_t mdss_mdp_vsync_show_event(struct device *dev,
 	struct fb_info *fbi = dev_get_drvdata(dev);
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
 	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
-	unsigned long flags;
 	u64 vsync_ticks;
-	unsigned long timeout;
 	int ret;
 
 	if (!mdp5_data->ctl || !mdp5_data->ctl->power_on)
-		return 0;
+		return -EAGAIN;
 
-	timeout = msecs_to_jiffies(VSYNC_PERIOD * 5);
-	ret = wait_for_completion_interruptible_timeout(&mdp5_data->vsync_comp,
-			timeout);
-	if (ret <= 0) {
-		pr_debug("Sending current time as vsync timestamp for fb%d\n",
-				mfd->index);
-		mdp5_data->vsync_time = ktime_get();
-	}
-
-	spin_lock_irqsave(&mdp5_data->vsync_lock, flags);
 	vsync_ticks = ktime_to_ns(mdp5_data->vsync_time);
-	spin_unlock_irqrestore(&mdp5_data->vsync_lock, flags);
 
 	pr_debug("fb%d vsync=%llu", mfd->index, vsync_ticks);
-	ret = snprintf(buf, PAGE_SIZE, "VSYNC=%llu", vsync_ticks);
+	ret = scnprintf(buf, PAGE_SIZE, "VSYNC=%llu", vsync_ticks);
 
 	return ret;
 }
@@ -2079,8 +2058,7 @@ int mdss_mdp_overlay_init(struct msm_fb_data_type *mfd)
 
 	INIT_LIST_HEAD(&mdp5_data->pipes_used);
 	INIT_LIST_HEAD(&mdp5_data->pipes_cleanup);
-	init_completion(&mdp5_data->vsync_comp);
-	spin_lock_init(&mdp5_data->vsync_lock);
+	INIT_WORK(&mdp5_data->vsync_work, mdss_mdp_overlay_dispatch_vsync);
 	mutex_init(&mdp5_data->ov_lock);
 	mdp5_data->hw_refresh = true;
 	mdp5_data->overlay_play_enable = true;

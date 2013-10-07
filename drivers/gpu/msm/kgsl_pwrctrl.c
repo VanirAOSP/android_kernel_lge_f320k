@@ -1288,6 +1288,7 @@ _nap(struct kgsl_device *device)
 			kgsl_pwrctrl_request_state(device, KGSL_STATE_NONE);
 			return -EBUSY;
 		}
+		del_timer_sync(&device->hang_timer);
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_NAP);
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_NAP);
@@ -1357,6 +1358,7 @@ _slumber(struct kgsl_device *device)
 	case KGSL_STATE_NAP:
 	case KGSL_STATE_SLEEP:
 		del_timer_sync(&device->idle_timer);
+		del_timer_sync(&device->hang_timer);
 		/* make sure power is on to stop the device*/
 		kgsl_pwrctrl_enable(device);
 		device->ftbl->suspend_context(device);
@@ -1432,13 +1434,14 @@ int kgsl_pwrctrl_wake(struct kgsl_device *device)
 			(unsigned int *) &context_id,
 			KGSL_MEMSTORE_OFFSET(KGSL_MEMSTORE_GLOBAL,
 				current_context));
-		context = idr_find(&device->context_idr, context_id);
+		context = kgsl_context_get(device, context_id);
 		if (context)
 			ts_processed = kgsl_readtimestamp(device, context,
 				KGSL_TIMESTAMP_RETIRED);
 		KGSL_PWR_INFO(device, "Wake from %s state. CTXT: %d RTRD TS: %08X\n",
 			kgsl_pwrstate_to_str(state),
 			context ? context->id : -1, ts_processed);
+		kgsl_context_put(context);
 		/* fall through */
 	case KGSL_STATE_NAP:
 		/* Turn on the core clocks */
@@ -1449,6 +1452,8 @@ int kgsl_pwrctrl_wake(struct kgsl_device *device)
 		/* Re-enable HW access */
 		mod_timer(&device->idle_timer,
 				jiffies + device->pwrctrl.interval_timeout);
+		mod_timer(&device->hang_timer,
+			(jiffies + msecs_to_jiffies(KGSL_TIMEOUT_PART)));
 		pm_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
 				device->pwrctrl.pm_qos_latency);
 	case KGSL_STATE_ACTIVE:

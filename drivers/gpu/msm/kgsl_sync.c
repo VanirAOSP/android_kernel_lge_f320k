@@ -118,16 +118,17 @@ int kgsl_add_fence_event(struct kgsl_device *device,
 	if (len != sizeof(priv))
 		return -EINVAL;
 
-	context = kgsl_find_context(owner, context_id);
-	if (context == NULL)
-		return -EINVAL;
-
 	event = kzalloc(sizeof(*event), GFP_KERNEL);
 	if (event == NULL)
 		return -ENOMEM;
+
+	context = kgsl_context_get_owner(owner, context_id);
+
+	if (context == NULL)
+		goto fail_pt;
+
 	event->context = context;
 	event->timestamp = timestamp;
-	kgsl_context_get(context);
 
 	pt = kgsl_sync_pt_create(context->timeline, timestamp);
 	if (pt == NULL) {
@@ -158,6 +159,10 @@ int kgsl_add_fence_event(struct kgsl_device *device,
 		goto fail_copy_fd;
 	}
 
+	/*
+	 * Hold the context ref-count for the event - it will get released in
+	 * the callback
+	 */
 	ret = kgsl_add_event(device, context_id, timestamp,
 			kgsl_fence_event_cb, event, owner);
 	if (ret)
@@ -179,16 +184,61 @@ fail_pt:
 	return ret;
 }
 
+static unsigned int kgsl_sync_get_timestamp(
+	struct kgsl_sync_timeline *ktimeline, enum kgsl_timestamp_type type)
+{
+	unsigned int ret = 0;
+
+	struct kgsl_context *context = kgsl_context_get(ktimeline->device,
+			ktimeline->context_id);
+
+	if (context)
+		ret = kgsl_readtimestamp(ktimeline->device, context, type);
+
+	kgsl_context_put(context);
+	return ret;
+}
+
+static void kgsl_sync_timeline_value_str(struct sync_timeline *sync_timeline,
+					 char *str, int size)
+{
+	struct kgsl_sync_timeline *ktimeline =
+		(struct kgsl_sync_timeline *) sync_timeline;
+	unsigned int timestamp_retired = kgsl_sync_get_timestamp(ktimeline,
+		KGSL_TIMESTAMP_RETIRED);
+	snprintf(str, size, "%u retired:%u", ktimeline->last_timestamp,
+		timestamp_retired);
+}
+
+static void kgsl_sync_pt_value_str(struct sync_pt *sync_pt,
+				   char *str, int size)
+{
+	struct kgsl_sync_pt *kpt = (struct kgsl_sync_pt *) sync_pt;
+	snprintf(str, size, "%u", kpt->timestamp);
+}
+
 static const struct sync_timeline_ops kgsl_sync_timeline_ops = {
 	.driver_name = "kgsl-timeline",
 	.dup = kgsl_sync_pt_dup,
 	.has_signaled = kgsl_sync_pt_has_signaled,
 	.compare = kgsl_sync_pt_compare,
+	.timeline_value_str = kgsl_sync_timeline_value_str,
+	.pt_value_str = kgsl_sync_pt_value_str,
 };
 
 int kgsl_sync_timeline_create(struct kgsl_context *context)
 {
 	struct kgsl_sync_timeline *ktimeline;
+
+	/* Generate a name which includes the thread name, thread id, process
+	 * name, process id, and context id. This makes it possible to
+	 * identify the context of a timeline in the sync dump. */
+	char ktimeline_name[sizeof(context->timeline->name)] = {};
+	snprintf(ktimeline_name, sizeof(ktimeline_name),
+		"%s_%.15s(%d)-%.15s(%d)-%d",
+		context->device->name,
+		current->group_leader->comm, current->group_leader->pid,
+		current->comm, current->pid, context->id);
 
 	context->timeline = sync_timeline_create(&kgsl_sync_timeline_ops,
 		(int) sizeof(struct kgsl_sync_timeline), "kgsl-timeline");
@@ -197,6 +247,8 @@ int kgsl_sync_timeline_create(struct kgsl_context *context)
 
 	ktimeline = (struct kgsl_sync_timeline *) context->timeline;
 	ktimeline->last_timestamp = 0;
+	ktimeline->device = context->device;
+	ktimeline->context_id = context->id;
 
 	return 0;
 }

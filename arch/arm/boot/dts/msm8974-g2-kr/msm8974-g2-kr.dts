@@ -12,7 +12,7 @@
 
 /dts-v1/;
 
-/include/ "msm8974-lge-common/msm8974-lge.dtsi"
+/include/ "../msm8974-lge-common/msm8974-lge.dtsi"
 /include/ "msm8974-g2-kr.dtsi"
 
 / {
